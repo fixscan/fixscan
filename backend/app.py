@@ -22,3 +22,4 @@ message = "Ваш аккаунт заблокирован, срочно подт
 result = analyze_message(message)
 
 print(result)
+print("FixScan AI started")
