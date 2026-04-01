@@ -118,3 +118,16 @@ app.add_handler(MessageHandler(filters.PHOTO, photo))
 print("BOT STARTED")
 
 app.run_polling()
+import threading
+from flask import Flask
+
+app_flask = Flask(__name__)
+
+@app_flask.route("/")
+def home():
+    return "Bot is running"
+
+def run_web():
+    app_flask.run(host="0.0.0.0", port=10000)
+
+threading.Thread(target=run_web).start()
