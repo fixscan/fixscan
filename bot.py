@@ -11,6 +11,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ADMIN_ID = 1099598015
 MAX_REQUESTS = 5
 
+TOTAL_LIMIT = 50
+total_requests = 0
+
 client = OpenAI(api_key=OPENAI_API_KEY)
 user_limits = {}
 
@@ -58,6 +61,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- обработка фото ---
 async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global total_requests
+
+    if total_requests >= TOTAL_LIMIT:
+        await update.message.reply_text("⚠️ Временный лимит. Попробуй позже")
+        return
+        
     user_id = update.message.from_user.id
     today = datetime.now().date()
 
@@ -72,6 +81,7 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user_limits[user_id]["count"] += 1
+    total_requests += 1
 
     photo = update.message.photo[-1]
     file = await photo.get_file()
