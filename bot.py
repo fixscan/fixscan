@@ -9,7 +9,7 @@ import os
 TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ADMIN_ID = 1099598015
-MAX_REQUESTS = 50
+MAX_REQUESTS = 5
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 user_limits = {}
@@ -68,7 +68,7 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_limits[user_id] = {"count": 0, "date": today}
 
     if user_limits[user_id]["count"] >= MAX_REQUESTS:
-        await update.message.reply_text("❌ Лимит 50 фото в день")
+        await update.message.reply_text("❌ Лимит 5 фото в день.\nНапишите,если нужно больше - дам доступ")
         return
 
     user_limits[user_id]["count"] += 1
@@ -107,7 +107,8 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = response.output_text or "Ошибка"
 
     await update.message.reply_text(result)
-
+    remaining = MAX_REQUESTS - user_limits[user_id]["count"]
+    await update.message.reply_text(f"📊 Осталось попыток: {remaining}")
 # --- запуск ---
 app = ApplicationBuilder().token(TOKEN).build()
 
