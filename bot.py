@@ -128,20 +128,8 @@ app.add_handler(MessageHandler(filters.PHOTO, photo))
 
 print("BOT STARTED")
 
-import threading
-from flask import Flask
-
-app_flask = Flask(__name__)
-
-@app_flask.route("/")
-def home():
-    return "Bot is running"
-
-def run_web():
-    app_flask.run(host="0.0.0.0", port=10000)
-
-# запускаем Flask ПЕРВЫМ
-threading.Thread(target=run_web).start()
-
-# потом бот
-app.run_polling()
+app.run_webhook(
+    listen="0.0.0.0",
+    port=10000,
+    webhook_url="https://fixscan-wj3x.onrender.com/webhook"
+)
