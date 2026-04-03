@@ -26,10 +26,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
     await update.message.reply_text(
-        "👋 Привет! Я FixScan AI\n\n"
-        "📸 Отправь фото крепежа — определю:\n"
-        "• тип\n• размер\n• назначение\n\n"
-        "👇 Нажми кнопку ниже",
+        "👋 Привет!\n\n"
+        "FixScan определяет крепёж по фото за 5 секунд.\n\n"
+        "Полезно:\n— на объекте\n— при заказчике\n— когда сомневаешься\n\n"
+        "Отправь фото 👇",
         reply_markup=reply_markup
     )
 
@@ -64,7 +64,7 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global total_requests
 
     if total_requests >= TOTAL_LIMIT:
-        await update.message.reply_text("⚠️ Временный лимит. Попробуй позже")
+        await update.message.reply_text("⚠️ Сервис временно перегружен. Попробуй позже 🙌")
         return
         
     user_id = update.message.from_user.id
@@ -117,7 +117,7 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = response.output_text or "Ошибка"
 
     await update.message.reply_text(result)
-    remaining = MAX_REQUESTS - user_limits[user_id]["count"]
+    await update.message.reply_text("Правильно определил?\n👍 Да / 👎 Нет")
     
 # --- запуск ---
 app = ApplicationBuilder().token(TOKEN).build()
