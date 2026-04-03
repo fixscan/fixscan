@@ -131,5 +131,6 @@ print("BOT STARTED")
 app.run_webhook(
     listen="0.0.0.0",
     port=10000,
-    webhook_url="https://fixscan-wj3x.onrender.com/webhook"
+    webhook_url="https://fixscan-wj3x.onrender.com/webhook",
+    url_path="webhook"
 )
