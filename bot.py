@@ -128,9 +128,4 @@ app.add_handler(MessageHandler(filters.PHOTO, photo))
 
 print("BOT STARTED")
 
-app.run_webhook(
-    listen="0.0.0.0",
-    port=10000,
-    webhook_url="https://fixscan-wj3x.onrender.com/webhook",
-    url_path="webhook"
-)
+app.run_polling()
