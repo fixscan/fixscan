@@ -128,4 +128,4 @@ app.add_handler(MessageHandler(filters.PHOTO, photo))
 
 print("BOT STARTED")
 
-app.run_polling()
+@app.post("/webhook")
