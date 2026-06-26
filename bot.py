@@ -1,131 +1,504 @@
 from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
-from openai import OpenAI
-import base64
-from datetime import datetime
-import os
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+import asyncio
 
-# --- настройки ---
-TOKEN = os.getenv("BOT_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-ADMIN_ID = 1099598015
-MAX_REQUESTS = 5
-
-TOTAL_LIMIT = 500
-total_requests = 0
-
-client = OpenAI(api_key=OPENAI_API_KEY)
-user_limits = {}
-
-# --- старт ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        ["📸 Сканировать крепёж"],
-        ["📩 Обратная связь"]
+main_keyboard = [
+        ["📸 Определить крепёж"],
+        ["🔩 Подобрать крепёж"],
+        ["✍️ Обратная связь"]
     ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-    await update.message.reply_text(
-        "👋 Привет!\n\n"
-        "FixScan определяет крепёж по фото за 5 секунд.\n\n"
-        "Полезно:\n— на объекте\n— при заказчике\n— когда сомневаешься\n\n"
-        "Отправь фото 👇",
-        reply_markup=reply_markup
-    )
+TOKEN = os.getenv("TOKEN")
 
-# --- обратная связь ---
-async def feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("✍️ Напишите отзыв")
-    context.user_data["feedback"] = True
-
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    if update.message.text == "📩 Обратная связь":
-        await feedback(update, context)
-        return
-
-    if context.user_data.get("feedback"):
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=f"📩 Отзыв:\n{update.message.text}"
-        )
-        await update.message.reply_text("✅ Спасибо!")
-        context.user_data["feedback"] = False
-        return
-
-    if update.message.text == "📸 Сканировать крепёж":
-        await update.message.reply_text("📷 Отправь фото")
-        return
-
-    await update.message.reply_text("Нажми кнопку ниже 👇")
-
-# --- обработка фото ---
-async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global total_requests
-
-    if total_requests >= TOTAL_LIMIT:
-        await update.message.reply_text("⚠️ Сервис временно перегружен. Попробуй позже 🙌")
-        return
-        
-    user_id = update.message.from_user.id
-    today = datetime.now().date()
-
-    if user_id not in user_limits:
-        user_limits[user_id] = {"count": 0, "date": today}
-
-    if user_limits[user_id]["date"] != today:
-        user_limits[user_id] = {"count": 0, "date": today}
-
-    if user_limits[user_id]["count"] >= MAX_REQUESTS:
-        await update.message.reply_text("❌ Лимит 5 фото в день...")
-        return
-
-    user_limits[user_id]["count"] += 1
-    total_requests += 1
-
-    photo = update.message.photo[-1]
-    file = await photo.get_file()
-    await file.download_to_drive("photo.jpg")
-
-    await update.message.reply_text("🔍 Анализирую...")
-
-    with open("photo.jpg", "rb") as f:
-        image_base64 = base64.b64encode(f.read()).decode()
-
-    response = client.responses.create(
-        model="gpt-4.1-mini",
-        input=[{
-            "role": "user",
-            "content": [
-                {"type": "input_text", "text": """Определи:
-1. Тип
-2. Размер
-3. Назначение
-
-Формат:
-Тип: ...
-Размер: ...
-Назначение: ...
-
-Если не видно → "нет данных"
-"""},
-                {"type": "input_image", "image_url": f"data:image/jpeg;base64,{image_base64}"}
-            ]
-        }]
-    )
-
-    result = response.output_text or "Ошибка"
-
-    await update.message.reply_text(result)
-    await update.message.reply_text("Правильно определил?\n👍 Да / 👎 Нет")
+# --- СТАРТ ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
-# --- запуск ---
+    await update.message.reply_text(
+        "🔩 Добро пожаловать в FixScan\n\n"
+        "Помогу определить крепёж по фото или подобрать крепёж для вашей задачи\n\n"
+        "👇 Выберите действие",
+        reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+    )
+
+
+# --- ОБРАБОТКА ФОТО ---
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📸 Фото получено.\n"
+        "🚧 Функция анализа находится в разработке."
+    )
+
+
+# --- ОСНОВНАЯ ЛОГИКА ---
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.lower()
+
+    wall_keyboard = [
+        ["🧱 Бетон", "🧱 Кирпич"],
+        ["🪨 Газобетон", "🪵 Гипсокартон"]
+    ]
+
+    # --- КНОПКИ ---
+    if "подобрать" in text:
+        keyboard = [
+            ["📚 Полка", "📺 Телевизор"],
+            ["🪞 Зеркало", "🪟 Карниз"],
+            ["🍽️ Кухонный шкаф"]
+        ]
+
+        await update.message.reply_text(
+            "Что нужно закрепить?",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
+        return
+
+    if "полка" in text:
+        context.user_data["object"] = "полка"
+
+        await update.message.reply_text(
+            "Какая стена?",
+            reply_markup=ReplyKeyboardMarkup(wall_keyboard, resize_keyboard=True)
+        )
+        
+        return
+
+    if "телевизор" in text:
+        context.user_data["object"] = "телевизор"
+
+        await update.message.reply_text(
+            "Какая стена?",
+            reply_markup=ReplyKeyboardMarkup(wall_keyboard, resize_keyboard=True)
+        )
+        
+        return
+
+    if "зеркало" in text:
+        context.user_data["object"] = "зеркало"
+
+        await update.message.reply_text(
+            "Какая стена?",
+            reply_markup=ReplyKeyboardMarkup(wall_keyboard, resize_keyboard=True)
+        )
+        
+        return
+
+    if "карниз" in text:
+        context.user_data["object"] = "карниз"
+
+        await update.message.reply_text(
+            "Какая стена?",
+            reply_markup=ReplyKeyboardMarkup(wall_keyboard, resize_keyboard=True)
+        )
+        
+        return
+
+    if "кухонный шкаф" in text:
+        context.user_data["object"] = "кухонный шкаф"
+
+        await update.message.reply_text(
+            "Какая стена?",
+            reply_markup=ReplyKeyboardMarkup(wall_keyboard, resize_keyboard=True)
+        )
+         
+        return
+   
+    if text == "🧱 бетон":
+
+        obj = context.user_data.get("object")
+
+        if obj == "полка":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Дюбель 6×40\n"
+            "• Саморез 4×50\n\n"
+            "⚠️ Проверить горизонталь уровнем\n"
+            "⚠️ Учитывать предполагаемую нагрузку"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+
+        elif obj == "телевизор":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Анкер 10×80\n\n"
+            "⚠️ Использовать все точки крепления кронштейна\n"
+            "⚠️ Проверить надёжность крепления кронштейна\n"
+            "⚠️ Не превышать допустимый вес крепления"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+        
+        elif obj == "зеркало":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Дюбель 6×40\n"
+            "• Саморез 4×50\n\n"
+            "⚠️ Учитывать вес зеркала\n"
+            "⚠️ Не устанавливать на повреждённую поверхность\n"
+            "⚠️ Проверить надёжность крепления"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+
+        elif obj == "карниз":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Дюбель 6×40\n"
+            "• Саморез 4×50\n\n"
+            "⚠️ Проверить отсутствие проводки над окном\n"
+            "⚠️ Соблюдать одинаковое расстояние от потолка"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+
+        elif obj == "кухонный шкаф":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Анкер 10×80\n"
+            "• Не менее 4 точек крепления\n\n"
+            "⚠️ Учитывать вес посуды и содержимого\n"
+            "⚠️ Проверить прочность стены\n"
+            "⚠️ Использовать все предусмотренные точки крепления"
+            )
+   
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+
+    if text == "🧱 кирпич":
+
+        obj = context.user_data.get("object")
+
+        if obj == "полка":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Дюбель 6×40\n"
+            "• Саморез 4×50\n\n"
+            "⚠️ Проверить горизонталь уровнем\n"
+            "⚠️ Учитывать предполагаемую нагрузку"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+
+        elif obj == "телевизор":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Анкер 10×80\n\n"
+            "⚠️ Использовать все точки крепления кронштейна"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+
+        elif obj == "зеркало":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Дюбель 6×40\n"
+            "• Саморез 4×50\n\n"
+            "⚠️ Учитывать вес зеркала\n"
+            "⚠️ Не устанавливать на повреждённую поверхность\n"
+            "⚠️ Проверить надёжность крепления"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+
+        elif obj == "карниз":
+             await update.message.reply_text(
+             "Рекомендуемый крепёж:\n"
+             "• Дюбель 6×40\n"
+             "• Саморез 4×50\n\n"
+             "⚠️ Проверить отсутствие проводки над окном\n"
+             "⚠️ Соблюдать одинаковое расстояние от потолка"
+             )
+
+             await update.message.reply_text(
+             "👇 Выберите действие",
+             reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+             )
+             return
+
+        elif obj == "кухонный шкаф":
+             await update.message.reply_text(
+             "Рекомендуемый крепёж:\n"
+             "• Анкер 10×80\n"
+             "• Не менее 4 точек крепления\n\n"
+             "⚠️ Учитывать вес посуды и содержимого\n"
+             "⚠️ Проверить прочность стены\n"
+             "⚠️ Использовать все предусмотренные точки крепления"
+             )
+
+             await update.message.reply_text(
+             "👇 Выберите действие",
+             reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+             )
+             return    
+        
+
+    if text == "🪨 газобетон":
+        
+        obj = context.user_data.get("object")
+
+        if obj == "полка":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Дюбель для газобетона\n"
+            "• Саморез 5×60\n\n"
+            "⚠️ Проверить горизонталь уровнем\n"
+            "⚠️ Учитывать предполагаемую нагрузку"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return  
+
+        elif obj == "телевизор":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Специальный анкер для газобетона\n\n"
+            "⚠️ Использовать все точки крепления кронштейна\n"
+            "⚠️ Проверить прочность основания"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+
+        elif obj == "зеркало":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Дюбель для газобетона\n"
+            "• Саморез 5×60\n\n"
+            "⚠️ Учитывать вес зеркала\n"
+            "⚠️ Проверить надёжность крепления"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+
+        elif obj == "карниз":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Дюбель для газобетона\n"
+            "• Саморез 5×60\n\n"
+            "⚠️ Проверить отсутствие проводки над окном\n"
+            "⚠️ Соблюдать одинаковое расстояние от потолка"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+
+        elif obj == "кухонный шкаф":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Химический анкер\n"
+            "• Не менее 4 точек крепления\n\n"
+            "⚠️ Учитывать вес посуды и содержимого\n"
+            "⚠️ Проверить прочность основания"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+        
+
+    if text == "🪵 гипсокартон":
+
+        obj = context.user_data.get("object")
+
+        if obj == "полка":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Дюбель Molly\n\n"
+            "⚠️ Учитывать предполагаемую нагрузку\n"
+            "⚠️ Проверить горизонталь уровнем"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return 
+
+        elif obj == "телевизор":
+            await update.message.reply_text(
+            "❌ Крепление запрещено.\n\n"
+            "Причина:\n"
+            "• Недостаточная прочность гипсокартона.\n\n"
+            "Рекомендуется крепление через закладную или к несущей стене."
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+
+        elif obj == "зеркало":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Дюбель Molly\n\n"
+            "⚠️ Учитывать вес зеркала\n"
+            "⚠️ Проверить надёжность крепления"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+
+        elif obj == "карниз":
+            await update.message.reply_text(
+            "Рекомендуемый крепёж:\n"
+            "• Дюбель Molly\n\n"
+            "⚠️ Проверить отсутствие проводки\n"
+            "⚠️ Соблюдать одинаковое расстояние от потолка"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+
+        elif obj == "кухонный шкаф":
+            await update.message.reply_text(
+            "⚠️ Крепление только через закладную.\n\n"
+            "⚠️ Учитывать вес шкафа и содержимого\n"
+            "⚠️ Проверить прочность основания"
+            )
+
+            await update.message.reply_text(
+            "👇 Выберите действие",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            )
+            return
+        
+
+    if "определить" in text:
+        await update.message.reply_text("📸 Скинь фото крепежа 👇")
+        return
+
+    if "обратная" in text:
+        context.user_data["feedback"] = True
+        await update.message.reply_text("Напиши что улучшить:")
+        return
+
+    # --- ФИДБЭК ---
+    if context.user_data.get("feedback"):
+        print("FEEDBACK:", update.message.text)
+        context.user_data["feedback"] = False
+        await update.message.reply_text("Спасибо! 👍")
+        return
+
+    step = context.user_data.get("step")
+
+    # --- СТЕНА ---
+    if step == "wall":
+        context.user_data["wall"] = text
+        context.user_data["step"] = "load"
+        await update.message.reply_text("Какая нагрузка? (лёгкая / средняя / тяжёлая)")
+        return
+
+    # --- НАГРУЗКА ---
+    if step == "load":
+        wall = context.user_data.get("wall", "")
+        load = text
+
+        if "кирпич" in wall:
+            if "лёг" in load:
+                result = "🔧 Дюбель 6x30\n💡 Можно 6x40"
+            elif "сред" in load:
+                result = "🔧 Дюбель 6x40 или 8x40\n💡 Лучше 8x40"
+            else:
+                result = "🔧 Анкер 8x60+"
+
+        elif "бетон" in wall:
+            if "лёг" in load:
+                result = "🔧 Дюбель 6x30"
+            elif "сред" in load:
+                result = "🔧 Дюбель 6x40 или 8x40"
+            else:
+                result = "🔧 Анкер 8x60+"
+
+        elif "гипс" in wall:
+            if "лёг" in load:
+                result = "🔧 Бабочка / молли"
+            elif "сред" in load:
+                result = "🔧 Молли"
+            else:
+                result = "⚠️ Нужен профиль"
+
+        else:
+            result = "Напиши материал стены точнее"
+
+        keyboard = [["👍 Да", "👎 Нет"]]
+
+        await update.message.reply_text(
+            result + "\n\nПодходит?",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
+
+        context.user_data["step"] = None
+        return
+
+    # --- КНОПКИ ОТВЕТА ---
+    if "да" in text:
+        await update.message.reply_text("🔥 Отлично!")
+        return
+
+    if "нет" in text:
+        await update.message.reply_text("Ок, напиши подробнее или скинь фото")
+        return
+
+
+# --- ЗАПУСК ---
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
+app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 app.add_handler(MessageHandler(filters.TEXT, handle_text))
-app.add_handler(MessageHandler(filters.PHOTO, photo))
 
 print("BOT STARTED")
-
 app.run_polling()
